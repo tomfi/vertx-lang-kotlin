@@ -26,11 +26,9 @@
     <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-lang-kotlin-coroutines</artifactId>
-      <version>4.1.0-SNAPSHOT</version>
+      <version>${project.version}</version>
       <optional>true</optional>
     </dependency>
-
-
     <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-codegen</artifactId>
@@ -43,12 +41,10 @@
       <classifier>tck</classifier>
       <scope>test</scope>
     </dependency>
-
   </dependencies>
 
   <build>
     <plugins>
-
       <plugin>
         <groupId>org.jetbrains.kotlin</groupId>
         <artifactId>kotlin-maven-plugin</artifactId>
@@ -102,6 +98,7 @@
       </plugin>
 
       <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-dependency-plugin</artifactId>
         <executions>
           <!-- Unpack codegen source code to sources/test/java -->
@@ -121,11 +118,6 @@
           </execution>
         </executions>
       </plugin>
-
     </plugins>
   </build>
-
-  <profiles>
-  </profiles>
-
 </project>

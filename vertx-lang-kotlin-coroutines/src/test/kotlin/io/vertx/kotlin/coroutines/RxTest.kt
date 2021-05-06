@@ -18,9 +18,11 @@ package io.vertx.kotlin.coroutines
 import io.vertx.ext.unit.TestContext
 import io.vertx.ext.unit.junit.VertxUnitRunner
 import io.vertx.reactivex.core.Vertx
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.reactive.openSubscription
+import kotlinx.coroutines.reactive.asFlow
 import kotlinx.coroutines.rx2.await
 import org.junit.After
 import org.junit.Before
@@ -49,21 +51,22 @@ class RxTest {
   fun `test flowable`(testContext: TestContext) {
     val async = testContext.async()
     val source = vertx.eventBus().consumer<Long>("the-address").toFlowable()
-    val latch = testContext.async()
 
-    GlobalScope.launch(vertx.delegate.dispatcher()) {
-      val channel = source.openSubscription()
-      latch.complete()
+    val latch = testContext.async()
+    CoroutineScope(vertx.delegate.dispatcher()).launch {
       var cnt = 0
-      for (x in channel) {
-        testContext.assertEquals(x.body(), cnt)
-        if (++cnt >= 3) {
-          break
+      source.asFlow()
+        .onEach { x ->
+          testContext.assertEquals(x.body(), cnt)
+          if (++cnt >= 3 && !async.isCompleted) {
+            async.complete()
+          }
         }
-      }
-      async.complete()
+        .launchIn(this)
+      latch.complete()
     }
     latch.await(10000)
+
     for (i in 0..4) {
       vertx.eventBus().send("the-address", i)
     }
@@ -76,10 +79,10 @@ class RxTest {
       .requestHandler { req -> req.response().end("hello") }
       .rxListen(8080)
 
-    GlobalScope.launch(vertx.delegate.dispatcher()) {
+    CoroutineScope(vertx.delegate.dispatcher()).launch {
       val server = single.await()
       server.rxClose().await()
       async.complete()
-    }
+    }.invokeOnCompletion { it?.run { testContext.fail(it) } }
   }
 }

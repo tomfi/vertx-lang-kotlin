@@ -63,17 +63,15 @@ class ReceiveChannelHandler<T>(context: Context) : ReceiveChannel<T>, Handler<T>
     return channel.receive()
   }
 
-  @ObsoleteCoroutinesApi
-  override suspend fun receiveOrNull(): T? {
-    return channel.receiveOrNull()
+  override suspend fun receiveCatching(): ChannelResult<T> {
+    return channel.receiveCatching()
   }
 
   override val onReceive: SelectClause1<T>
     get() = channel.onReceive
 
-  @ExperimentalCoroutinesApi
-  override val onReceiveOrNull: SelectClause1<T?>
-    get() = channel.onReceiveOrNull
+  override val onReceiveCatching: SelectClause1<ChannelResult<T>>
+    get() = channel.onReceiveCatching
 
   override fun handle(event: T) {
     launch { channel.send(event) }
@@ -91,17 +89,12 @@ class ReceiveChannelHandler<T>(context: Context) : ReceiveChannel<T>, Handler<T>
   }
 
   @Deprecated(level = DeprecationLevel.ERROR, message = "Since 3.7.1, binary compatibility with versions <= 3.7.0")
-  override fun cancel(): Unit {
+  override fun cancel() {
     return channel.cancel()
   }
 
-  @InternalCoroutinesApi
-  override val onReceiveOrClosed: SelectClause1<ValueOrClosed<T>>
-    get() = channel.onReceiveOrClosed
-
-  @InternalCoroutinesApi
-  override suspend fun receiveOrClosed(): ValueOrClosed<T> {
-    return channel.receiveOrClosed()
+  override fun tryReceive(): ChannelResult<T> {
+    return channel.tryReceive()
   }
 }
 
@@ -116,7 +109,6 @@ fun <T> Vertx.receiveChannelHandler(): ReceiveChannelHandler<T> = ReceiveChannel
  * The adapter will fetch at most max channel capacity from the stream and pause it when the channel is full.
  *
  * @param vertx the related vertx instance
- * @param capacity the channel buffering capacity
  */
 fun <T> ReadStream<T>.toChannel(vertx: Vertx): ReceiveChannel<T> {
   return toChannel(vertx.getOrCreateContext())
@@ -139,9 +131,11 @@ fun <T> ReadStream<T>.toChannel(context: Context): ReceiveChannel<T> {
   return ret
 }
 
-private class ChannelReadStream<T>(val stream: ReadStream<T>,
-                                   val channel: Channel<T>,
-                                   context: Context) : Channel<T> by channel, CoroutineScope {
+private class ChannelReadStream<T>(
+  val stream: ReadStream<T>,
+  val channel: Channel<T>,
+  context: Context
+) : Channel<T> by channel, CoroutineScope {
 
   override val coroutineContext: CoroutineContext = context.dispatcher()
   fun subscribe() {
@@ -183,7 +177,6 @@ fun <T> WriteStream<T>.toChannel(vertx: Vertx, capacity: Int = DEFAULT_CAPACITY)
  * @param context the vertx context
  * @param capacity the channel buffering capacity
  */
-@ExperimentalCoroutinesApi
 fun <T> WriteStream<T>.toChannel(context: Context, capacity: Int = DEFAULT_CAPACITY): SendChannel<T> {
   val ret = ChannelWriteStream(
     stream = this,
@@ -194,13 +187,14 @@ fun <T> WriteStream<T>.toChannel(context: Context, capacity: Int = DEFAULT_CAPAC
   return ret
 }
 
-private class ChannelWriteStream<T>(val stream: WriteStream<T>,
-                                    val channel: Channel<T>,
-                                    context: Context) : Channel<T> by channel, CoroutineScope {
+private class ChannelWriteStream<T>(
+  val stream: WriteStream<T>,
+  val channel: Channel<T>,
+  context: Context
+) : Channel<T> by channel, CoroutineScope {
 
   override val coroutineContext: CoroutineContext = context.dispatcher()
 
-  @ExperimentalCoroutinesApi
   fun subscribe() {
     stream.exceptionHandler {
       channel.close(it)
@@ -208,7 +202,7 @@ private class ChannelWriteStream<T>(val stream: WriteStream<T>,
 
     launch {
       while (true) {
-        val elt = channel.receiveOrNull()
+        val elt = channel.receiveCatching().getOrNull()
         if (stream.writeQueueFull()) {
           stream.drainHandler {
             if (dispatch(elt)) {
